@@ -2,17 +2,17 @@ import torch
 from torch import nn 
 import torch.nn.functional as F
 from torch.autograd import Variable
-from marl_planner.common.utils import *
+from common.utils import *
     
 class ContinuousMLP(nn.Module):
 
-    def __init__(self,args,agent):
+    def __init__(self,args):
         super(ContinuousMLP,self).__init__()
 
         self.args = args
-        input_shape = args.input_shape[agent]
-        n_action = args.n_actions[agent]
-        bound = args.max_action[agent]
+        input_shape = args.input_shape
+        n_action = args.n_actions
+        bound = args.max_action
 
         self.bound = torch.tensor(bound,dtype=torch.float32)
         self.actionNet =  nn.Sequential(
@@ -31,27 +31,6 @@ class ContinuousMLP(nn.Module):
         action = self.actionNet(state)
         # self.bound = self.bound.reshape(action.shape)
         action = action*self.bound
-
-        return action
-
-class DiscreteMLP(nn.Module):
-
-    def __init__(self,args,agent):
-        super(DiscreteMLP,self).__init__()
-
-        self.args = args
-        self.actionNet =  nn.Sequential(
-            nn.Linear(args.input_shape[agent],args.policy_hidden),
-            nn.ReLU(),
-            nn.Linear(args.policy_hidden,args.policy_hidden),
-            nn.ReLU(),
-            nn.Linear(args.policy_hidden,args.n_actions[agent]),
-            nn.Softmax(dim=-1)
-        )
-
-    def forward(self,state):
-
-        action = self.actionNet(state)
 
         return action
     
