@@ -11,7 +11,7 @@ class DDPG:
     DDPG Algorithm 
     '''
     def __init__(self,args,policy):
-
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.args = args # Argument values given by the user
         self.learning_step = 0 # counter to keep track of learning
         self.policy = policy
@@ -20,12 +20,12 @@ class DDPG:
 
     def choose_action(self,state,stage="training"):
         
-        state = torch.Tensor(state)
+        state = torch.Tensor(state).to(self.device)
         if stage == "training":
-            action = self.PolicyNetwork(state).detach().numpy()
+            action = self.PolicyNetwork(state).to("cpu").detach().numpy()
             action += self.noiseOBJ()
         else:
-            action = self.TargetPolicyNetwork(state).detach().numpy()
+            action = self.TargetPolicyNetwork(state).to("cpu").detach().numpy()
 
         action = np.clip(action,self.args.min_action,self.args.max_action)
 
@@ -40,12 +40,12 @@ class DDPG:
         
         state,action,reward,next_state,done = self.replay_buffer.shuffle()
 
-        state = torch.Tensor(state)
-        next_state = torch.Tensor(next_state)        
-        action  = torch.Tensor(action)
-        reward = torch.Tensor(reward)
-        next_state = torch.Tensor(next_state)
-        done = torch.Tensor(done)
+        state = torch.Tensor(state).to(self.device)
+        next_state = torch.Tensor(next_state).to(self.device)
+        action  = torch.Tensor(action).to(self.device)
+        reward = torch.Tensor(reward).to(self.device)
+        next_state = torch.Tensor(next_state).to(self.device)
+        done = torch.Tensor(done).to(self.device)
         
         target_critic_action = self.TargetPolicyNetwork(next_state)
         target = self.TargetQNetwork(next_state,target_critic_action)
@@ -76,13 +76,13 @@ class DDPG:
         # Exploration Technique
         self.noiseOBJ = OUActionNoise(mean=np.zeros(self.args.n_actions), std_deviation=float(0.08) * np.ones(self.args.n_actions))
         
-        self.PolicyNetwork = self.policy(self.args)
+        self.PolicyNetwork = self.policy(self.args).to(self.device)
         self.PolicyOptimizer = torch.optim.Adam(self.PolicyNetwork.parameters(),lr=self.args.actor_lr)
-        self.TargetPolicyNetwork = self.policy(self.args)
+        self.TargetPolicyNetwork = self.policy(self.args).to(self.device)
 
-        self.Qnetwork = DDPGCritic(self.args)
+        self.Qnetwork = DDPGCritic(self.args).to(self.device)
         self.QOptimizer = torch.optim.Adam(self.Qnetwork.parameters(),lr=self.args.critic_lr)
-        self.TargetQNetwork = DDPGCritic(self.args)
+        self.TargetQNetwork = DDPGCritic(self.args).to(self.device)
 
         hard_update(self.TargetPolicyNetwork,self.PolicyNetwork)
         hard_update(self.TargetQNetwork,self.Qnetwork)

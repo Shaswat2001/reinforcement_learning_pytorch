@@ -4,6 +4,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from common.utils import *
     
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 class ContinuousMLP(nn.Module):
 
     def __init__(self,args):
@@ -14,7 +16,7 @@ class ContinuousMLP(nn.Module):
         n_action = args.n_actions
         bound = args.max_action
 
-        self.bound = torch.tensor(bound,dtype=torch.float32)
+        self.bound = torch.tensor(bound,dtype=torch.float32).to(device)
         self.actionNet =  nn.Sequential(
             nn.Linear(input_shape,256),
             nn.ReLU(),
