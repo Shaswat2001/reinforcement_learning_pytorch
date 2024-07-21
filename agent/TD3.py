@@ -1,41 +1,30 @@
 import numpy as np
 import torch
-from trajectory_tracking_rl.pytorch_utils import hard_update,soft_update
+from common.exploration import OUActionNoise
+from common.replay_buffer import ReplayBuffer
+from network.ddpg_critic import DDPGCritic
+from common.utils import hard_update,soft_update
 import os
 
 class TD3:
 
-    def __init__(self,args,policy,critic,replayBuff,exploration):
+    def __init__(self,args,policy):
 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.args = args
         self.learning_step = 0 
-        self.replay_buffer = replayBuff(input_shape = args.input_shape,mem_size = args.mem_size,n_actions = args.n_actions,batch_size = args.batch_size)
-        self.noiseOBJ = exploration(mean=np.zeros(args.n_actions), std_deviation=float(0.2) * np.ones(args.n_actions))
+        self.policy = policy
         
-        self.PolicyNetwork = policy(args.input_shape,args.n_actions,args.max_action)
-        self.PolicyOptimizer = torch.optim.Adam(self.PolicyNetwork.parameters(),lr=args.actor_lr)
-        self.TargetPolicyNetwork = policy(args.input_shape,args.n_actions,args.max_action)
-
-        self.Qnetwork1 = critic(args.input_shape,args.n_actions)
-        self.QOptimizer1 = torch.optim.Adam(self.Qnetwork1.parameters(),lr=args.critic_lr)
-        self.TargetQNetwork1 = critic(args.input_shape,args.n_actions)
-
-        self.Qnetwork2 = critic(args.input_shape,args.n_actions)
-        self.QOptimizer2 = torch.optim.Adam(self.Qnetwork2.parameters(),lr=args.critic_lr)
-        self.TargetQNetwork2 = critic(args.input_shape,args.n_actions)
-
-        hard_update(self.TargetPolicyNetwork,self.PolicyNetwork)
-        hard_update(self.TargetQNetwork1,self.Qnetwork1)
-        hard_update(self.TargetQNetwork2,self.Qnetwork2)
+        self.reset()
 
     def choose_action(self,state,stage = "training"):
         
-        state = torch.Tensor(state)
+        state = torch.Tensor(state).to(self.device)
         if stage == "training":
-            action = self.PolicyNetwork(state).detach().numpy()
+            action = self.PolicyNetwork(state).to("cpu").detach().numpy()
             action += self.noiseOBJ()
         else:
-            action = self.TargetPolicyNetwork(state).detach().numpy()
+            action = self.TargetPolicyNetwork(state).to("cpu").detach().numpy()
 
         action = np.clip(action,self.args.min_action,self.args.max_action)
 
@@ -48,11 +37,13 @@ class TD3:
             return
 
         state,action,reward,next_state,done = self.replay_buffer.shuffle()
-        state = torch.Tensor(state)
-        action  = torch.Tensor(action)
-        reward = torch.Tensor(reward)
-        next_state = torch.Tensor(next_state)
-        done = torch.Tensor(done)
+
+        state = torch.Tensor(state).to(self.device)
+        next_state = torch.Tensor(next_state).to(self.device)
+        action  = torch.Tensor(action).to(self.device)
+        reward = torch.Tensor(reward).to(self.device)
+        next_state = torch.Tensor(next_state).to(self.device)
+        done = torch.Tensor(done).to(self.device)
 
         target_critic_action = self.TargetPolicyNetwork(next_state)
         Q1 = self.TargetQNetwork1(next_state,target_critic_action)
@@ -83,7 +74,29 @@ class TD3:
             soft_update(self.TargetQNetwork1,self.Qnetwork1,self.args.tau)
             soft_update(self.TargetQNetwork2,self.Qnetwork2,self.args.tau)
 
-    def add(self,s,action,rwd,constraint,next_state,done):
+    def reset(self):
+
+        self.replay_buffer = ReplayBuffer(self.args.state_size,mem_size = self.args.mem_size,n_actions = self.args.n_actions,batch_size = self.args.batch_size)
+        # Exploration Technique
+        self.noiseOBJ = OUActionNoise(mean=np.zeros(self.args.n_actions), std_deviation=float(0.08) * np.ones(self.args.n_actions))
+        
+        self.PolicyNetwork = self.policy(self.args).to(self.device)
+        self.PolicyOptimizer = torch.optim.Adam(self.PolicyNetwork.parameters(),lr=self.args.actor_lr)
+        self.TargetPolicyNetwork = self.policy(self.args).to(self.device)
+
+        self.Qnetwork1 = DDPGCritic(self.args).to(self.device)
+        self.QOptimizer1 = torch.optim.Adam(self.Qnetwork1.parameters(),lr=self.args.critic_lr)
+        self.TargetQNetwork1 = DDPGCritic(self.args).to(self.device)
+
+        self.Qnetwork2 = DDPGCritic(self.args).to(self.device)
+        self.QOptimizer2 = torch.optim.Adam(self.Qnetwork2.parameters(),lr=self.args.critic_lr)
+        self.TargetQNetwork2 = DDPGCritic(self.args).to(self.device)
+
+        hard_update(self.TargetPolicyNetwork,self.PolicyNetwork)
+        hard_update(self.TargetQNetwork1,self.Qnetwork1)
+        hard_update(self.TargetQNetwork2,self.Qnetwork2)
+
+    def add(self,s,action,rwd,next_state,done):
         self.replay_buffer.store(s,action,rwd,next_state,done)
     
     def save(self,env):

@@ -7,7 +7,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
-from agent import DDPG
+from agent import DDPG, TD3
 from network.base_net import ContinuousMLP
 from common.arguments import build_parse
 from myosuite.utils import gym
@@ -82,5 +82,7 @@ if __name__=="__main__":
 
     if args.Algorithm == "DDPG":
         agent = DDPG.DDPG(args = args,policy = ContinuousMLP)
+    elif args.Algorithm == "TD3":
+        agent = TD3.TD3(args = args,policy = ContinuousMLP)
 
     train(args,env,agent)

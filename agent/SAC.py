@@ -1,20 +1,19 @@
 from sre_parse import State
 import numpy as np
 import torch
-from trajectory_tracking_rl.pytorch_utils import hard_update,soft_update
+from common.utils import hard_update,soft_update
 import os
 
 
 class SAC:
 
-    def __init__(self,args,policy,critic,valueNet,replayBuff,exploration,eval_rl=False):
+    def __init__(self,args,policy,critic,valueNet,replayBuff,exploration):
 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.args = args
         self.learning_step = 0 
-        self.eval_rl = eval_rl
-        if not self.eval_rl:
-            self.replay_buffer = replayBuff(input_shape = args.input_shape,mem_size = args.mem_size,n_actions = args.n_actions,batch_size = args.batch_size)
-            self.noiseOBJ = exploration(mean=np.zeros(args.n_actions), std_deviation=float(0.2) * np.ones(args.n_actions))
+        self.replay_buffer = replayBuff(input_shape = args.input_shape,mem_size = args.mem_size,n_actions = args.n_actions,batch_size = args.batch_size)
+        self.noiseOBJ = exploration(mean=np.zeros(args.n_actions), std_deviation=float(0.2) * np.ones(args.n_actions))
         
         self.PolicyNetwork = policy(args.input_shape,args.n_actions,args.max_action,args.log_std_min,args.log_std_max)
         self.PolicyOptimizer = torch.optim.Adam(self.PolicyNetwork.parameters(),lr=args.actor_lr)
@@ -25,8 +24,6 @@ class SAC:
         self.TargetVNetwork = valueNet(args.input_shape)
 
         hard_update(self.TargetVNetwork,self.VNetwork)
-        if self.eval_rl:
-            self.load()
 
     def choose_action(self,state,stage="training"):
         
